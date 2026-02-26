@@ -454,15 +454,27 @@ elif page == "🔗 Workflow Builder":
             start = time.time()
             bar = st.progress(0)
             total = len(st.session_state.current_workflow_steps)
+            all_ok = True
             for i, step in enumerate(st.session_state.current_workflow_steps):
                 st.info(f"⏳ Executando etapa {step['id']}: {step['type']}…")
-                time.sleep(0.6)
+                try:
+                    result = engine._execute_step(step)
+                    add_log(f"Etapa {step['id']} concluída: {step['type']} → {result}", "INFO")
+                    st.success(f"✅ Etapa {step['id']}: {result}")
+                except Exception as e:
+                    all_ok = False
+                    add_log(f"Erro na etapa {step['id']}: {e}", "ERROR")
+                    st.error(f"❌ Etapa {step['id']}: {e}")
+                    break
                 bar.progress((i + 1) / total)
-                add_log(f"Etapa {step['id']} concluída: {step['type']}", "INFO")
             duration = time.time() - start
-            add_execution(wf_name or "Pipeline Ad-hoc", "Sucesso", duration)
-            add_log(f"Pipeline concluído em {duration:.1f}s", "SUCCESS")
-            st.success(f"✅ Pipeline concluído em **{duration:.1f}s**!")
+            status = "Sucesso" if all_ok else "Erro"
+            add_execution(wf_name or "Pipeline Ad-hoc", status, duration)
+            add_log(f"Pipeline concluído em {duration:.1f}s — {status}", "SUCCESS" if all_ok else "ERROR")
+            if all_ok:
+                st.success(f"✅ Pipeline concluído em **{duration:.1f}s**!")
+            else:
+                st.error(f"Pipeline parou com erro após {duration:.1f}s")
 
         if col3.button("🗑️ Limpar Etapas", use_container_width=True):
             st.session_state.current_workflow_steps = []
@@ -476,12 +488,18 @@ elif page == "🔗 Workflow Builder":
                     st.markdown(f"**{s['id']}.** {s['type']} — {s['description']}")
                 if st.button("▶️ Executar", key=f"runwf_{wf['id']}"):
                     start = time.time()
-                    for s in wf["steps"]:
-                        time.sleep(0.4)
+                    result = engine.execute_workflow(wf)
                     duration = time.time() - start
-                    add_execution(wf["name"], "Sucesso", duration)
-                    add_log(f"Workflow '{wf['name']}' concluído ({duration:.1f}s)", "SUCCESS")
-                    st.success(f"Workflow executado em {duration:.1f}s!")
+                    add_execution(wf["name"], result["status"], duration)
+                    for sr in result["steps_results"]:
+                        level = "INFO" if sr["status"] == "Sucesso" else "ERROR"
+                        detail = sr.get("result", sr.get("error", ""))
+                        add_log(f"Etapa {sr['step_id']} ({sr['type']}): {sr['status']} → {detail}", level)
+                    add_log(f"Workflow '{wf['name']}' — {result['status']} ({duration:.1f}s)", "SUCCESS" if result["status"] == "Sucesso" else "ERROR")
+                    if result["status"] == "Sucesso":
+                        st.success(f"Workflow executado em {duration:.1f}s!")
+                    else:
+                        st.error(f"Workflow falhou após {duration:.1f}s. Verifique os logs.")
 
 # ──────────────────────────────────────────────────────────────
 # 📁 Operações de Arquivo

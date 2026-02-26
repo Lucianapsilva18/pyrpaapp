@@ -73,6 +73,21 @@ class WorkflowEngine:
                 params.get("filtro") or None,
                 op,
             )
+            if result["status"] == "Erro":
+                raise RuntimeError(result["message"])
+            return result["message"]
+
+        if "Renomear" in step_type:
+            from modules.file_ops import FileOperations
+            fops = FileOperations()
+            result = fops.batch_rename(
+                params.get("origem", ""),
+                params.get("prefixo", ""),
+                params.get("add_date", False),
+                params.get("add_seq", True),
+            )
+            if result["status"] == "Erro":
+                raise RuntimeError(result["message"])
             return result["message"]
 
         if "Web" in step_type:
@@ -82,9 +97,9 @@ class WorkflowEngine:
                 params.get("url", ""),
                 params.get("seletor") or None,
             )
-            if result["status"] == "Sucesso":
-                return f"Extraído {len(result['data'])} caracteres"
-            return result["message"]
+            if result["status"] == "Erro":
+                raise RuntimeError(result["message"])
+            return f"Extraído {len(result['data'])} caracteres"
 
         if "Script" in step_type:
             code = params.get("codigo", "")
